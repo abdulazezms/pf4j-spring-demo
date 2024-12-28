@@ -1,0 +1,8 @@
+logging:
+  level:
+    org.pf4j: DEBUG
+    com.aziz.pf4jspringpaymentplugins: DEBUG
+    org.springframework.web: DEBUG
+
+server:
+  port: 8080
