@@ -161,7 +161,7 @@ This can be done by setting the parent application context of the plugin module 
 ```java
 if(wrapper.getPluginManager() instanceof SpringPluginManager springPluginManager) {
         applicationContext.setParent(springPluginManager.getApplicationContext());
-        }
+}
 ```
 
 ## References
