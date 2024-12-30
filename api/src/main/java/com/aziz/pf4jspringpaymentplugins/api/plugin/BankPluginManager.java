@@ -1,7 +1,14 @@
 package com.aziz.pf4jspringpaymentplugins.api.plugin;
 
-import com.aziz.pf4jspringpaymentplugins.api.exception.*;
+import com.aziz.pf4jspringpaymentplugins.api.config.AppProperties;
+import com.aziz.pf4jspringpaymentplugins.api.entity.BankPlugin;
+import com.aziz.pf4jspringpaymentplugins.api.exception.BankPluginAlreadyExistsException;
+import com.aziz.pf4jspringpaymentplugins.api.exception.ExtensionNotFoundException;
+import com.aziz.pf4jspringpaymentplugins.api.exception.MoreThanOneExtensionFound;
+import com.aziz.pf4jspringpaymentplugins.api.exception.PluginJarProcessingException;
+import com.aziz.pf4jspringpaymentplugins.api.exception.UnsupportedBankException;
 import com.aziz.pf4jspringpaymentplugins.api.exception.UnsupportedPluginFileException;
+import com.aziz.pf4jspringpaymentplugins.api.repository.BankPluginRepository;
 import jakarta.annotation.PreDestroy;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -13,29 +20,33 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.util.*;
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 @Slf4j
 public class BankPluginManager {
 
-    public static final Path pluginsRootLocation = Paths.get("api/target/plugins");
-
-    private static final Map<String, String> bankIdToPluginId = new HashMap<>();
-
     private final SpringPluginManager springPluginManager;
+
+    private final BankPluginRepository bankPluginRepository;
+
+    private final AppProperties appProperties;
 
 
     public void addBankPlugin(String bankId, MultipartFile jarFile) {
-        if(bankIdToPluginId.containsKey(bankId)) {
+        if(bankPluginRepository.existsByBankId(bankId)) {
             throw new BankPluginAlreadyExistsException("A plugin with the mapped bank ID already exists");
         }
-        String pluginFilePath = createBankPlugin(bankId, jarFile);
+        String pluginFilePath = persistJar(jarFile);
         try {
             String pluginId = springPluginManager.loadPlugin(Path.of(pluginFilePath));
-            bankIdToPluginId.put(bankId, pluginId);
+            BankPlugin bankPlugin = new BankPlugin();
+            bankPlugin.setPluginId(pluginId);
+            bankPlugin.setBankId(bankId);
+            bankPluginRepository.save(bankPlugin);
             springPluginManager.startPlugin(pluginId);
         } catch (PluginAlreadyLoadedException ex) {
             throw new BankPluginAlreadyExistsException("""
@@ -45,16 +56,17 @@ public class BankPluginManager {
         }
     }
 
-    private String createBankPlugin(String bankId, MultipartFile jarFile) {
+    private String persistJar(MultipartFile jarFile) {
         String fileName = jarFile.getOriginalFilename();
         if (fileName == null || !fileName.endsWith(".jar")) { //inspect the jar to validate...
             throw new UnsupportedPluginFileException("Plugin file must be a jar file");
         }
 
         try {
-            Files.createDirectories(pluginsRootLocation);
+            var pluginsPath = Path.of(appProperties.getPluginsPath());
+            Files.createDirectories(pluginsPath);
             fileName = StringUtils.cleanPath(Objects.requireNonNull(fileName));
-            Path targetLocation = pluginsRootLocation.resolve(fileName);
+            Path targetLocation = pluginsPath.resolve(fileName);
             if(Files.exists(targetLocation)) {
                 throw new BankPluginAlreadyExistsException("Bank plugin already exists");
             }
@@ -63,16 +75,16 @@ public class BankPluginManager {
         } catch (BankPluginAlreadyExistsException e) {
             throw e;
         } catch (Exception e) {
-             log.error(e.getMessage(), e);
-             throw new PluginJarProcessingException("Failed to process plugin jar file");
+            log.error(e.getMessage(), e);
+            throw new PluginJarProcessingException("Failed to process plugin jar file");
         }
     }
 
     public <T> T getBankPluginImplementation(String bankId, Class<T> clazz) {
         log.debug("Searching for bank plugin implementation for: {}", clazz.getSimpleName());
-        String bankPluginId = getPluginId(bankId)
+        BankPlugin bankPlugin = getPluginId(bankId)
                 .orElseThrow(() -> new UnsupportedBankException("Bank is not supported"));
-
+        String bankPluginId = bankPlugin.getPluginId();
         List<T> extensions = springPluginManager.getExtensions(clazz, bankPluginId);
         if(extensions.isEmpty()) {
             log.debug("No implementation found in bank's plugin: {} for: {}", bankPluginId, clazz.getSimpleName());
@@ -90,8 +102,7 @@ public class BankPluginManager {
         springPluginManager.stopPlugins();
     }
 
-    private Optional<String> getPluginId(String bankId) {
-        String pluginId = bankIdToPluginId.getOrDefault(bankId, null);
-        return pluginId == null? Optional.empty() : Optional.of(pluginId);
+    private Optional<BankPlugin> getPluginId(String bankId) {
+        return bankPluginRepository.findByBankId(bankId);
     }
 }

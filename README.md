@@ -42,9 +42,8 @@ import org.springframework.context.annotation.Configuration;
 public class AppConfig {
 
     @Bean
-    public SpringPluginManager springPluginManager() {
-        return new SpringPluginManager() {
-            //Or use new SpringPluginManager(pluginsPath) if plugins are packaged with the application.
+    public SpringPluginManager springPluginManager(AppProperties appProperties) {
+        return new SpringPluginManager(Path.of(appProperties.getPluginsPath())) {
             @Override
             protected ExtensionFactory createExtensionFactory() {
                 return new SingletonSpringExtensionFactory(this);
@@ -148,7 +147,7 @@ java -jar api/target/api-0.0.1-SNAPSHOT.jar
 ```
 
 ### 3. Upload a Plugin
-1. go to [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html) 
+1. go to [http://localhost:8080/swagger-ui/index.html](http://localhost:8080/swagger-ui/index.html)
 2. Upload either bank's plugin JAR from `[first|second]-bank-plugin/target/*.jar` and associate it with the `<bank-id>`
 3. Initiate a payment against `<bank-id>`. `<bank-id>` plugin implementation will then be used.
 
@@ -156,13 +155,13 @@ java -jar api/target/api-0.0.1-SNAPSHOT.jar
 
 ### Application Context Sharing
 
-A plugin module can share the application context with the host module. 
+A plugin module can share the application context with the host module.
 This can be done by setting the parent application context of the plugin module to that of the host.
 
 ```java
 if(wrapper.getPluginManager() instanceof SpringPluginManager springPluginManager) {
-    applicationContext.setParent(springPluginManager.getApplicationContext());    
-}
+        applicationContext.setParent(springPluginManager.getApplicationContext());
+        }
 ```
 
 ## References

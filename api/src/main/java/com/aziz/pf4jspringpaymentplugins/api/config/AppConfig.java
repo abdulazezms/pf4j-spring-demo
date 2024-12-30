@@ -6,13 +6,14 @@ import org.pf4j.spring.SpringPluginManager;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
+import java.nio.file.Path;
+
 @Configuration
 public class AppConfig {
 
     @Bean
-    public SpringPluginManager springPluginManager() {
-        return new SpringPluginManager() {
-            //Or use new SpringPluginManager(pluginsPath) if plugins are packaged with the application.
+    public SpringPluginManager springPluginManager(AppProperties appProperties) {
+        return new SpringPluginManager(Path.of(appProperties.getPluginsPath())) {
             @Override
             protected ExtensionFactory createExtensionFactory() {
                 return new SingletonSpringExtensionFactory(this);
